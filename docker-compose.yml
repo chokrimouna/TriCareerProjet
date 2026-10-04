@@ -1,0 +1,145 @@
+# =====================================================================
+# TriCareer - Orchestration de l'application complète
+#
+#  >>> POUR L'UTILISATEUR FINAL (ex : l'encadrante) <<<
+#  Il suffit d'avoir Docker Desktop installé, puis :
+#       docker compose pull        # télécharge les images depuis Docker Hub
+#       docker compose up -d       # démarre toute l'application
+#
+#  Accès :
+#    - Frontend (application web) : http://localhost:5174
+#    - API (Swagger)              : http://localhost:5144/swagger
+#    - Keycloak (authentification): http://localhost:8080
+#
+#  Ce fichier est AUTONOME : aucun fichier .env n'est nécessaire.
+#  (les noms d'images et mots de passe ont des valeurs par défaut intégrées)
+# =====================================================================
+
+services:
+
+  # ------------------------- Base de données -------------------------
+  sqlserver:
+    image: ${DOCKERHUB_USER:-mounachokri}/tricareer-db:latest
+    container_name: tricareer-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD:-YourStrong!Passw0rd}"
+      MSSQL_PID: "Developer"
+    ports:
+      - "15433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      # "sain" seulement quand les bases sont restaurées (marqueur) ET que le moteur répond
+      test: ["CMD-SHELL", "test -f /var/opt/mssql/data/.tricareer_initialized && /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -b -Q \"SELECT 1\""]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 90s
+    restart: unless-stopped
+
+  # ------------------------- Authentification ------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: tricareer-keycloak
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      # Compte admin (ancien + nouveau nommage selon version de Keycloak)
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN:-admin}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN:-admin}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+      # Base de données SQL Server
+      KC_DB: "mssql"
+      KC_DB_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=keycloak;encrypt=true;trustServerCertificate=true"
+      KC_DB_USERNAME: "keycloak_user"
+      KC_DB_PASSWORD: "Keycloak!Passw0rd"
+      KC_TRANSACTION_XA_ENABLED: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "8080:8080"
+    command: ["start-dev"]
+    restart: unless-stopped
+
+  # ----------------------------- API --------------------------------
+  api:
+    image: ${DOCKERHUB_USER:-mounachokri}/tricareer-api:latest
+    container_name: tricareer-api
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_URLS: "http://+:5144"
+      # Surcharge la clé "Urls" d'appsettings.json (sinon l'API n'écoute que sur localhost
+      # interne au conteneur et reste injoignable depuis l'extérieur)
+      Urls: "http://+:5144"
+      # Connexion .NET -> SQL Server (nom du service "sqlserver" sur le réseau Docker)
+      ConnectionStrings__ConnectionString: "Server=sqlserver,1433;Database=TriCareerDb;User Id=sa;Password=${SA_PASSWORD:-YourStrong!Passw0rd};TrustServerCertificate=True"
+      # Connexion du script Python d'analyse de CV
+      PY_DATABASE_URL: "mssql+pyodbc://sa:${SA_PASSWORD:-YourStrong!Passw0rd}@sqlserver:1433/TriCareerDb?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      # URL du micro-service IA de matching/classement (US23/US29)
+      MATCHING_AI_URL: "http://matching-ai:8000"
+      # Envoi d'email (invitation test/entretien) — surcharge appsettings.json.
+      # Le compte par défaut est celui de Mouna ; le mot de passe n'a PAS de valeur
+      # par défaut (jamais écrit en dur) — soit via .env (EMAIL_PASSWORD), soit via
+      # la page Admin > Paramètres SMTP > Synchroniser (persiste sur le volume api_settings).
+      Email__Host: "${EMAIL_HOST:-smtp.gmail.com}"
+      Email__Port: "${EMAIL_PORT:-587}"
+      Email__EnableSsl: "${EMAIL_ENABLE_SSL:-true}"
+      Email__Username: "${EMAIL_USERNAME:-mouna.chokri@esprit.tn}"
+      Email__Password: "${EMAIL_PASSWORD:-}"
+      Email__FromName: "${EMAIL_FROM_NAME:-TriCareer}"
+    ports:
+      - "5144:5144"
+    volumes:
+      - api_resources:/app/Resources
+      # Config admin (ex: SMTP) modifiable via l'UI — volume séparé de "Resources"
+      # car ce dernier est servi publiquement en fichiers statiques.
+      - api_settings:/app/Settings
+    restart: unless-stopped
+
+  # ------------------ Micro-service IA : matching / classement -------
+  matching-ai:
+    image: ${DOCKERHUB_USER:-mounachokri}/tricareer-matching:latest
+    container_name: tricareer-matching
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      DB_SERVER: "sqlserver,1433"
+      DB_DATABASE: "TriCareerDb"
+      DB_USER: "sa"
+      DB_PASSWORD: "${SA_PASSWORD:-YourStrong!Passw0rd}"
+      CV_FOLDER: "/data/Cv"
+      # Analyse IA (compétences, forces/faiblesses, rapport, quiz) via l'API OpenAI (ChatGPT).
+      # À renseigner dans le fichier .env — clé sur https://platform.openai.com/api-keys
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
+      # Repli optionnel sur Groq si OPENAI_API_KEY n'est pas fournie.
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      GROQ_MODEL: "${GROQ_MODEL:-llama-3.1-8b-instant}"
+    volumes:
+      # accès en lecture aux CV stockés par l'API (volume partagé)
+      - api_resources:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # -------------------------- Frontend web ---------------------------
+  frontend:
+    image: ${DOCKERHUB_USER:-mounachokri}/tricareer-frontend:latest
+    container_name: tricareer-frontend
+    depends_on:
+      - api
+    ports:
+      - "5174:80"
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
+  api_resources:
+  api_settings:

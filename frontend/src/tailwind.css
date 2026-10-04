@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@source '../**/*.{js,ts,jsx,tsx}';
+
+@import 'tw-animate-css';
+
+/* Restore original Figma Make styling layers */
+@import './styles/fonts.css';
+@import './styles/theme.css';
+@import './styles/index.css';

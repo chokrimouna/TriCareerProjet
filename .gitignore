@@ -1,0 +1,45 @@
+# =====================================================================
+# Fichiers à NE PAS pousser sur GitHub
+# =====================================================================
+
+# --- Secrets / configuration locale ---
+.env
+*.env.local
+backend/tri360-career-api/tri360-career-api/appsettings.Development.json
+
+# --- .NET ---
+[Bb]in/
+[Oo]bj/
+.vs/
+bin_old_*/
+build_out/
+*.user
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# --- Node / Frontend ---
+node_modules/
+frontend/dist/
+.pnpm-store/
+
+# --- Logs et fichiers de debug ---
+*.log
+log.txt
+backend_log.txt
+server_log.txt
+bind_error.txt
+ts_errors*.txt
+build_current*.log
+build_error.log
+
+# --- Téléchargements temporaires de build ---
+packages-microsoft-prod.deb
+
+# --- Système ---
+.DS_Store
+Thumbs.db

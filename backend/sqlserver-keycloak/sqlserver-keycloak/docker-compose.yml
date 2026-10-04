@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver2022
+    hostname: sqlserver2022
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+      MSSQL_PID: "Developer"
+    ports:
+      - "15433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - ./initdb:/initdb
+    restart: unless-stopped
+
+  # service "one-shot" qui attend SQL, puis lance le script
+  sql-init:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: sqlserver_init
+    depends_on:
+      - sqlserver
+    volumes:
+      - ./initdb:/initdb
+    entrypoint: >
+      bash -c "
+      echo 'Waiting for SQL Server...';
+      for i in {1..60}; do
+        /opt/mssql-tools/bin/sqlcmd -S sqlserver2022 -U sa -P 'YourStrong!Passw0rd' -Q 'SELECT 1' && break;
+        sleep 2;
+      done;
+      echo 'Running init script...';
+      /opt/mssql-tools/bin/sqlcmd -S sqlserver2022 -U sa -P 'YourStrong!Passw0rd' -i /initdb/keycloak-init.sql;
+      echo 'Init done.';
+      "
+    restart: "no"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    environment:
+      KEYCLOAK_ADMIN: "admin"
+      KEYCLOAK_ADMIN_PASSWORD: "admin"
+
+      KC_DB: "mssql"
+      KC_DB_URL: "jdbc:sqlserver://sqlserver2022:1433;databaseName=keycloak;encrypt=true;trustServerCertificate=true"
+      KC_DB_USERNAME: "keycloak_user"
+      KC_DB_PASSWORD: "Keycloak!Passw0rd"
+
+      # recommandé avec MSSQL pour éviter soucis XA
+      KC_TRANSACTION_XA_ENABLED: "false" # :contentReference[oaicite:1]{index=1}
+
+      # dev
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "8080:8080"
+    command: ["start-dev"]
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:

@@ -1,0 +1,27 @@
+# Ne pas envoyer ces fichiers/dossiers dans le contexte de build Docker
+bin/
+obj/
+bin_old_*/
+build_out/
+.vs/
+__pycache__/
+*.pyc
+node_modules/
+scratch/
+
+# Logs et fichiers de debug (on garde requirements.txt !)
+*.log
+log.txt
+backend_log.txt
+server_log.txt
+bind_error.txt
+ts_errors*.txt
+find_braces.ps1
+restart.ps1
+
+# Secrets / config locale (injectés via variables d'environnement)
+appsettings.Development.json
+
+# Fichiers Docker eux-mêmes
+Dockerfile
+.dockerignore

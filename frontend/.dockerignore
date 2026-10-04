@@ -1,0 +1,15 @@
+# Ne pas envoyer ces fichiers/dossiers dans le contexte de build Docker
+node_modules/
+dist/
+.git/
+
+# Logs et fichiers temporaires
+*.log
+build_current*.log
+build_error.log
+ts_errors*.txt
+original_admin.txt
+
+# Fichiers Docker eux-mêmes
+Dockerfile
+.dockerignore

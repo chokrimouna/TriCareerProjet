@@ -1,0 +1,36 @@
+# =====================================================================
+# Surcouche de BUILD (réservée au développeur / mainteneur)
+#
+# À combiner avec docker-compose.yml pour construire et publier les images :
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml push
+#
+# Les contextes de build pointent vers les sources du dépôt.
+# Keycloak n'est pas reconstruit (image officielle réutilisée telle quelle).
+# =====================================================================
+
+services:
+
+  sqlserver:
+    build:
+      context: ./backend/db
+      dockerfile: Dockerfile
+
+  api:
+    build:
+      context: ./backend/tri360-career-api/tri360-career-api
+      dockerfile: Dockerfile
+
+  matching-ai:
+    build:
+      context: ./ai-services/matching
+      dockerfile: Dockerfile
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # URL de l'API telle que vue par le NAVIGATEUR de l'utilisateur final
+        VITE_API_BASE_URL: "http://localhost:5144"

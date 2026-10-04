@@ -1,0 +1,18 @@
+# Service de matching CV/offre (FastAPI). torch (CPU) est installé séparément dans le Dockerfile.
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pyodbc==5.1.0
+sentence-transformers==2.7.0
+scikit-learn==1.4.2
+numpy==1.26.4
+PyMuPDF==1.24.5
+groq==0.11.0
+# API OpenAI (ChatGPT) — fournisseur LLM principal. Épinglé <=1.54 pour rester
+# compatible avec httpx==0.27.2 (les versions >=1.55 exigent httpx 0.28+).
+openai==1.51.2
+# httpx épinglé < 0.28 : groq 0.11 ET openai<=1.54 passent l'argument 'proxies'
+# supprimé par httpx 0.28+
+httpx==0.27.2
+# Lecture des CV Word (.docx) pour l'analyse IA
+python-docx==1.1.2
+python-dotenv==1.0.1
